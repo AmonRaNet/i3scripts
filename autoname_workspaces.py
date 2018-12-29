@@ -36,6 +36,7 @@ import sys
 import fontawesome as fa
 
 from util import *
+from logging.handlers import RotatingFileHandler
 
 # Add icons here for common programs you use.  The keys are the X window class
 # (WM_CLASS) names (lower-cased) and the icons can be any text you want to
@@ -49,7 +50,7 @@ from util import *
 # then click on the application you want to inspect.
 WINDOW_ICONS = {
     'alacritty': fa.icons['terminal'],
-    'atom': fa.icons['code'],
+    'atom': fa.icons['atom'],
     'banshee': fa.icons['play'],
     'cura': fa.icons['cube'],
     'darktable': fa.icons['image'],
@@ -69,6 +70,7 @@ WINDOW_ICONS = {
     'postman': fa.icons['space-shuttle'],
     'slack': fa.icons['slack'],
     'spotify': fa.icons['music'],  # could also use the 'spotify' icon
+    'rhythmbox': fa.icons['play'],
     'steam': fa.icons['steam'],
     'subl': fa.icons['file-alt'],
     'subl3': fa.icons['file-alt'],
@@ -79,6 +81,9 @@ WINDOW_ICONS = {
     'urxvt': fa.icons['terminal'],
     'xfce4-terminal': fa.icons['terminal'],
     'zenity': fa.icons['window-maximize'],
+    'x-terminal-emulator': fa.icons['terminal'],
+    'terminator': fa.icons['terminal'],
+    'gnome-terminal': fa.icons['terminal'],
 }
 
 # This icon is used for any application not in the list above
@@ -92,23 +97,32 @@ def ensure_window_icons_lowercase():
             del WINDOW_ICONS[cls]
 
 
+def print_icon(icon):
+    return '[' + icon + ']'
+
+
 def icon_for_window(window):
     # Try all window classes and use the first one we have an icon for
     classes = xprop(window.window, 'WM_CLASS')
+    class0 = None
     if classes != None and len(classes) > 0:
         for cls in classes:
             cls = cls.lower()  # case-insensitive matching
             if cls in WINDOW_ICONS:
-                return WINDOW_ICONS[cls]
+                return print_icon(WINDOW_ICONS[cls])
+            if not class0:
+                class0 = cls
     logging.info(
         'No icon available for window with classes: %s' % str(classes))
-    return DEFAULT_ICON
+    if class0:
+        return print_icon(class0)
+    return print_icon(DEFAULT_ICON)
 
 
 # renames all workspaces based on the windows present
 # also renumbers them in ascending order, with one gap left between monitors
 # for example: workspace numbering on two monitors: [1, 2, 3], [5, 6]
-def rename_workspaces(i3):
+def rename_workspaces_and_renumber(i3):
     ws_infos = i3.get_workspaces()
     prev_output = None
     n = 1
@@ -137,6 +151,24 @@ def rename_workspaces(i3):
             'rename workspace "%s" to "%s"' % (workspace.name, new_name))
 
 
+# renames all workspaces based on the windows present
+# and keep original numbers
+def rename_workspaces(i3):
+    ws_infos = i3.get_workspaces()
+    for ws_index, workspace in enumerate(i3.get_tree().workspaces()):
+        ws_info = ws_infos[ws_index]
+
+        name_parts = parse_workspace_name(workspace.name)
+        new_icons = ' '.join([icon_for_window(w) for w in workspace.leaves()])
+        new_name = construct_workspace_name(
+            NameParts(
+                num=workspace.num, shortname=name_parts.shortname, icons=new_icons))
+        if workspace.name == new_name:
+            continue
+        i3.command(
+            'rename workspace "%s" to "%s"' % (workspace.name, new_name))
+
+
 # Rename workspaces to just numbers and shortnames, removing the icons.
 def on_exit(i3):
     for workspace in i3.get_tree().workspaces():
@@ -153,8 +185,25 @@ def on_exit(i3):
     sys.exit(0)
 
 
+def init_logging():
+    logFormatter = logging.Formatter("%(asctime)s [%(levelname)-3.3s]  %(message)s")
+    rootLogger = logging.getLogger()
+    rootLogger.setLevel(logging.INFO)
+
+    logFile = __file__ + '.log'
+    fileHandler = RotatingFileHandler(logFile, mode='a', maxBytes=5*1024*1024,
+                                 backupCount=2, encoding=None, delay=0)
+
+    fileHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(fileHandler)
+
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(consoleHandler)
+
+
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
+    init_logging()
 
     ensure_window_icons_lowercase()
 
