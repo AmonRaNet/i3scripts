@@ -37,6 +37,7 @@ import sys
 import fontawesome as fa
 
 from util import *
+from logging.handlers import RotatingFileHandler
 
 # Add icons here for common programs you use.  The keys are the X window class
 # (WM_CLASS) names (lower-cased) and the icons can be any text you want to
@@ -50,7 +51,8 @@ from util import *
 # then click on the application you want to inspect.
 WINDOW_ICONS = {
     'alacritty': fa.icons['terminal'],
-    'atom': fa.icons['code'],
+    'atom': fa.icons['atom'],
+    'code': fa.icons['code'],
     'banshee': fa.icons['play'],
     'blender': fa.icons['cube'],
     'chromium': fa.icons['chrome'],
@@ -99,6 +101,7 @@ WINDOW_ICONS = {
     'slack': fa.icons['slack'],
     'slic3r.pl': fa.icons['cube'],
     'spotify': fa.icons['music'],  # could also use the 'spotify' icon
+    'rhythmbox': fa.icons['play'],
     'steam': fa.icons['steam'],
     'subl': fa.icons['file-alt'],
     'subl3': fa.icons['file-alt'],
@@ -112,6 +115,9 @@ WINDOW_ICONS = {
     'yelp': fa.icons['code'],
     'zenity': fa.icons['window-maximize'],
     'zoom': fa.icons['comment'],
+    'x-terminal-emulator': fa.icons['terminal'],
+    'terminator': fa.icons['terminal'],
+    'gnome-terminal': fa.icons['terminal'],
 }
 
 # This icon is used for any application not in the list above
@@ -128,17 +134,26 @@ def ensure_window_icons_lowercase():
     WINDOW_ICONS = {name.lower(): icon for name, icon in WINDOW_ICONS.items()}
 
 
+def print_icon(icon):
+    return '[' + icon + ']'
+
+
 def icon_for_window(window):
     # Try all window classes and use the first one we have an icon for
     classes = xprop(window.window, 'WM_CLASS')
+    class0 = None
     if classes != None and len(classes) > 0:
         for cls in classes:
             cls = cls.lower()  # case-insensitive matching
             if cls in WINDOW_ICONS:
-                return WINDOW_ICONS[cls]
-    logging.info('No icon available for window with classes: %s' %
-                 str(classes))
-    return DEFAULT_ICON
+                return print_icon(WINDOW_ICONS[cls])
+            if not class0:
+                class0 = cls
+    logging.info(
+        'No icon available for window with classes: %s' % str(classes))
+    if class0:
+        return print_icon(class0)
+    return print_icon(DEFAULT_ICON)
 
 
 # renames all workspaces based on the windows present
@@ -191,6 +206,23 @@ def on_exit(i3):
     sys.exit(0)
 
 
+def init_logging():
+    logFormatter = logging.Formatter("%(asctime)s [%(levelname)-3.3s]  %(message)s")
+    rootLogger = logging.getLogger()
+    rootLogger.setLevel(logging.INFO)
+
+    logFile = __file__ + '.log'
+    fileHandler = RotatingFileHandler(logFile, mode='a', maxBytes=5*1024*1024,
+                                 backupCount=2, encoding=None, delay=0)
+
+    fileHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(fileHandler)
+
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(consoleHandler)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description=
@@ -215,7 +247,7 @@ if __name__ == '__main__':
 
     RENUMBER_WORKSPACES = not args.norenumber_workspaces
 
-    logging.basicConfig(level=logging.INFO)
+    init_logging()
 
     ensure_window_icons_lowercase()
 
